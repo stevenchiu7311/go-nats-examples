@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// subscribe new cannot get historic message
 func main() {
 	// 連線到nats的伺服器
 	conn, err := nats.Connect("nats://127.0.0.1:4222")
@@ -39,13 +40,6 @@ func main() {
 		}
 	}
 
-	sub := subscribeNew(js)
-	defer func() {
-		if err := sub.Unsubscribe(); err != nil {
-			log.Panicln(err)
-		}
-	}()
-
 	// 傳送訊息
 	future, _ := js.PublishAsync(subject, []byte("Hello World! "+time.Now().Format(time.RFC3339)))
 
@@ -56,6 +50,13 @@ func main() {
 		log.Fatalln("Did not receive completion signal")
 	}
 	time.Sleep(2 * time.Second)
+
+	sub := subscribeNew(js)
+	defer func() {
+		if err := sub.Unsubscribe(); err != nil {
+			log.Panicln(err)
+		}
+	}()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

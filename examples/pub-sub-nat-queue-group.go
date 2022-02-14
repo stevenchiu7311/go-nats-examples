@@ -11,6 +11,7 @@ import (
 	nats "github.com/nats-io/nats.go"
 )
 
+//Sub 1 leave in queue group, and sub2 will take over all of subscription messages
 func main() {
 	opts := []nats.Option{nats.Timeout(10 * 60 * time.Second),
 		nats.MaxReconnects(50), nats.ReconnectWait(10 * time.Second), nats.ReconnectHandler(func(_ *nats.Conn) {
@@ -46,12 +47,12 @@ func main() {
 	var Sub1Cb *nats.Subscription
 	var Sub2Cb *nats.Subscription
 	go func() {
-		ctx, _ := context.WithTimeout(context.Background(), 5 * time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		Sub1Cb, err = nc.QueueSubscribe("testTopic.Steven", "queue", mcbSteven1)
 		if err != nil {
 			log.Println("queue subscribe testTopic.Steven:", err)
 		}
-		<- ctx.Done()
+		<-ctx.Done()
 		log.Println("Sub1Cb leave")
 		Sub1Cb.Unsubscribe()
 	}()
@@ -70,6 +71,7 @@ func main() {
 	Sub1Cb.Unsubscribe()
 	Sub2Cb.Unsubscribe()
 }
+
 /*
 2020/09/29 23:39:45 send: hello_Steven_0
 2020/09/29 23:39:45 Any: hello_Steven_0

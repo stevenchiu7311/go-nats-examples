@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/stan.go/pb"
 )
 
+// After receive function work 5s, mock all subs disconnection and cannot receive/ack about 7s
 func main() {
 	opts := []nats.Option{nats.Timeout(10 * 60 * time.Second),
 		nats.MaxReconnects(50), nats.ReconnectWait(10 * time.Second), nats.ReconnectHandler(func(_ *nats.Conn) {
@@ -26,7 +27,7 @@ func main() {
 	}
 	defer nc.Close()
 
-	sc, err := stan.Connect("test-cluster", "nathan01", stan.NatsConn(nc),
+	sc, err := stan.Connect("test-cluster", "queue-group", stan.NatsConn(nc),
 		stan.SetConnectionLostHandler(func(_ stan.Conn, reason error) {
 			log.Printf("Connection lost, reason: %v\n", reason)
 
@@ -63,14 +64,36 @@ func main() {
 	var sub1 stan.Subscription
 	var sub2 stan.Subscription
 	go func() {
-		sub1, err = sc.QueueSubscribe("topic", "g1", mcbSub1, startOpt, stan.DurableName(""), stan.MaxInflight(1), subAck, ackWait)
+		sub1, err = sc.QueueSubscribe("topic", "g1", mcbSub1, startOpt, stan.DurableName("durable"), stan.MaxInflight(1), subAck, ackWait)
 		if err != nil {
 			log.Println("queue subscribe Topic:", err)
 		}
 	}()
 
 	go func() {
-		sub2, err = sc.QueueSubscribe("topic", "g1", mcbSub2, startOpt, stan.DurableName(""), stan.MaxInflight(1), subAck, ackWait)
+		sub2, err = sc.QueueSubscribe("topic", "g1", mcbSub2, startOpt, stan.DurableName("durable"), stan.MaxInflight(10), subAck, ackWait)
+		if err != nil {
+			log.Println("queue subscribe testTopic:", err)
+		}
+	}()
+
+	time.Sleep(time.Second * 5)
+
+	sub1.Close()
+	sub2.Close()
+	log.Println("After receive function work 5s, mock all subs disconnection and cannot receive/ack about 7s")
+	time.Sleep(time.Second * 7)
+	log.Println("Resume resume the connection")
+
+	go func() {
+		sub1, err = sc.QueueSubscribe("topic", "g1", mcbSub1, startOpt, stan.DurableName("durable"), stan.MaxInflight(1), subAck, ackWait)
+		if err != nil {
+			log.Println("queue subscribe Topic:", err)
+		}
+	}()
+
+	go func() {
+		sub2, err = sc.QueueSubscribe("topic", "g1", mcbSub2, startOpt, stan.DurableName("durable"), stan.MaxInflight(10), subAck, ackWait)
 		if err != nil {
 			log.Println("queue subscribe testTopic:", err)
 		}
@@ -80,18 +103,9 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 
 	<-c
-	sub1.Unsubscribe()
+	sub1.Close()
 	sub2.Unsubscribe()
 	sub1.Close()
-	sub2.ClearMaxPending()
+	sub2.Unsubscribe()
 	sc.Close()
 }
-/*
-2020/09/30 00:17:57 Sub2: hello_0
-2020/09/30 00:17:58 Sub2: hello_1
-2020/09/30 00:17:59 Sub1: hello_2
-2020/09/30 00:18:00 Sub2: hello_3
-2020/09/30 00:18:01 Sub1: hello_4
-2020/09/30 00:18:02 Sub2: hello_5
-2020/09/30 00:18:03 Sub1: hello_6
-*/

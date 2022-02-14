@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// subscribe last cannot get historic
 func main() {
 	// 連線到nats的伺服器
 	conn, err := nats.Connect("nats://127.0.0.1:4222")

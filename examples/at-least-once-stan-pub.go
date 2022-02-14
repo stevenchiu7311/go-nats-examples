@@ -9,7 +9,6 @@ import (
 
 	nats "github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
-	"github.com/nats-io/stan.go/pb"
 )
 
 func main() {
@@ -26,7 +25,7 @@ func main() {
 	}
 	defer nc.Close()
 
-	sc, err := stan.Connect("test-cluster", "nathan01", stan.NatsConn(nc),
+	sc, err := stan.Connect("test-cluster", "at-least-once-stan-pub", stan.NatsConn(nc),
 		stan.SetConnectionLostHandler(func(_ stan.Conn, reason error) {
 			log.Printf("Connection lost, reason: %v\n", reason)
 
@@ -36,9 +35,6 @@ func main() {
 		fmt.Printf("CMake sure a NATS Streaming Server is running at: %s", URL)
 
 	}
-	startOpt := stan.StartAt(pb.StartPosition_NewOnly)
-	subAck := stan.SetManualAckMode()
-	ackWait := stan.AckWait(10 * time.Second)
 
 	go func() {
 		var cnt = 0
@@ -53,27 +49,13 @@ func main() {
 		}
 	}()
 
-	mcbSub1 := func(msg *stan.Msg) {
-		log.Println("Sub:", string(msg.Data))
-		defer msg.Ack()
-	}
-	var sub1 stan.Subscription
-	go func() {
-		sub1, err = sc.Subscribe("topic", mcbSub1, startOpt, stan.DurableName("topic_durable"), subAck, ackWait)
-
-		if err != nil {
-			log.Println("queue subscribe Topic:", err)
-		}
-	}()
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
 	<-c
-	sub1.Unsubscribe()
-	sub1.Close()
 	sc.Close()
 }
+
 /*
 2020/09/30 00:17:57 Sub2: hello_0
 2020/09/30 00:17:58 Sub2: hello_1

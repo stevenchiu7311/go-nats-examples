@@ -5,8 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"time"
 
 	nats "github.com/nats-io/nats.go"
@@ -14,7 +12,6 @@ import (
 	"github.com/nats-io/stan.go/pb"
 )
 
-// Stop ack at 4th message and still can accept 5 message in sub cb function with MaxInflight(5)
 func main() {
 	opts := []nats.Option{nats.Timeout(10 * 60 * time.Second),
 		nats.MaxReconnects(50), nats.ReconnectWait(10 * time.Second), nats.ReconnectHandler(func(_ *nats.Conn) {
@@ -29,7 +26,7 @@ func main() {
 	}
 	defer nc.Close()
 
-	sc, err := stan.Connect("test-cluster", "pub-sub-stan-maxinflight", stan.NatsConn(nc),
+	sc, err := stan.Connect("test-cluster", "at-least-once-stan-sub", stan.NatsConn(nc),
 		stan.SetConnectionLostHandler(func(_ stan.Conn, reason error) {
 			log.Printf("Connection lost, reason: %v\n", reason)
 
@@ -39,38 +36,20 @@ func main() {
 		fmt.Printf("CMake sure a NATS Streaming Server is running at: %s", URL)
 
 	}
-	startOpt := stan.StartAt(pb.StartPosition_NewOnly)
+	startOpt := stan.StartAt(pb.StartPosition_LastReceived)
 	subAck := stan.SetManualAckMode()
 	ackWait := stan.AckWait(10 * time.Second)
 
-	go func() {
-		var cnt = 0
-		timer := time.NewTimer(1 * time.Second)
-		for {
-			sc.Publish("topic", []byte(fmt.Sprintf("hello_%d", cnt)))
-			cnt++
-			<-timer.C
-			timer.Reset(1 * time.Second)
-		}
-	}()
-
-	mcbSub := func(msg *stan.Msg) {
+	mcbSub1 := func(msg *stan.Msg) {
 		log.Println("Sub:", string(msg.Data))
-		counterStr := strings.Replace(string(msg.Data), "hello_", "", -1)
-		counter, _ := strconv.ParseInt(counterStr, 10, 0)
-		if counter < 3 {
-			defer msg.Ack()
-		} else {
-			log.Println("Sub no ack:", string(msg.Data))
-		}
+		defer msg.Ack()
 	}
-
-	var Sub stan.Subscription
-
+	var sub stan.Subscription
 	go func() {
-		Sub, err = sc.QueueSubscribe("topic", "g1", mcbSub, startOpt, stan.DurableName(""), stan.MaxInflight(5), subAck, ackWait)
+		sub, err = sc.QueueSubscribe("topic", "q1", mcbSub1, startOpt, stan.DurableName("topic_durable"), subAck, ackWait)
+
 		if err != nil {
-			log.Println("queue subscribe testTopic:", err)
+			log.Println("queue subscribe Topic:", err)
 		}
 	}()
 
@@ -78,7 +57,16 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 
 	<-c
-	Sub.Unsubscribe()
-	Sub.ClearMaxPending()
+	sub.Close()
 	sc.Close()
 }
+
+/*
+2020/09/30 00:17:57 Sub2: hello_0
+2020/09/30 00:17:58 Sub2: hello_1
+2020/09/30 00:17:59 Sub1: hello_2
+2020/09/30 00:18:00 Sub2: hello_3
+2020/09/30 00:18:01 Sub1: hello_4
+2020/09/30 00:18:02 Sub2: hello_5
+2020/09/30 00:18:03 Sub1: hello_6
+*/
