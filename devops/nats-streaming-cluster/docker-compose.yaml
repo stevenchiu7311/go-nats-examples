@@ -1,0 +1,170 @@
+version: "3.6"
+
+services:
+    nats-1:
+        image: nats:2.1.8-alpine3.11
+        networks:
+            nat-cluster_net:
+              ipv4_address: 172.16.230.100
+        command: 
+            - "--debug"
+            - "--cluster"
+            - "nats://0.0.0.0:6222"
+            - "--http_port"
+            - "8222"
+            - "--port" 
+            - "4222"
+        ports: 
+            - "4222:4222"
+            - "8222:8222"
+        expose: 
+            - 4222
+            - 8222
+            - 6222
+    nats-2:
+        image: nats:2.1.8-alpine3.11
+        networks:
+            nat-cluster_net:
+                ipv4_address: 172.16.230.101
+        command: 
+            - "--debug"
+            - "--cluster" 
+            - "nats://0.0.0.0:6222"
+            - "--http_port"
+            - "8222"
+            - "--port" 
+            - "4222"
+            - "--routes" 
+            - "nats://nats-1:6222"
+        ports: 
+            - "14222:4222"
+            - "18222:8222"
+        expose: 
+            - 4222
+            - 8222
+            - 6222
+        depends_on:
+            - nats-1
+    nats-streaming-1:
+        image: nats-streaming:0.18.0-alpine
+        networks:
+            nat-cluster_net:
+                ipv4_address: 172.16.230.105
+        command: 
+            - "--clustered"
+            - "--nats_server"
+            - "nats://nats-1:6222"
+            - "--cluster_bootstrap"
+            - "--cluster_node_id"
+            - "node1"
+            - "--cluster_log_path"
+            - "/data/log"
+            - "--cluster_raft_logging"
+            - "--debug"
+            - "--dir"
+            - "/data/msg"
+            - "--store"
+            - "file"
+            - "--cluster"
+            - "nats://0.0.0.0:6222"
+            - "--stan_debug"
+            - "--http_port"
+            - "8222"
+            - "--hb_interval"
+            - 2s
+            - "--hb_fail_count"
+            - "1"
+            - "--hb_timeout"
+            - 5s
+        ports: 
+            - "18224:8222"
+        volumes:
+            - "./nats-streaming-1:/data"
+        depends_on:
+            - nats-1
+    nats-streaming-2:
+        image: nats-streaming:0.18.0-alpine
+        networks:
+            nat-cluster_net:
+                ipv4_address: 172.16.230.106
+        command: 
+            - "--clustered"
+            - "--nats_server"
+            - "nats://nats-1:6222"
+            - "--cluster_node_id"
+            - "node2"
+            - "--cluster_log_path"
+            - "/data/log"
+            - "--cluster_raft_logging"
+            - "--debug"
+            - "--dir"
+            - "/data/msg"
+            - "--store"
+            - "file"
+            - "--stan_debug"
+            - "--cluster"
+            - "nats://0.0.0.0:6222"
+            - "--routes"
+            - "nats://nats-streaming-1:6222"
+            - "--http_port"
+            - "8222"
+            - "--hb_interval"
+            - 2s
+            - "--hb_fail_count"
+            - "1"
+            - "--hb_timeout"
+            - 5s
+        ports: 
+            - "18225:8222"
+        volumes:
+            - "./nats-streaming-2:/data"
+        depends_on:
+            - nats-1
+            - nats-streaming-1
+    nats-streaming-3:
+        image: nats-streaming:0.18.0-alpine
+        networks:
+            nat-cluster_net:
+                ipv4_address: 172.16.230.107
+        command: 
+            - "--clustered"
+            - "--nats_server"
+            - "nats://nats-1:6222"
+            - "--cluster_node_id"
+            - "node3"
+            - "--cluster_log_path"
+            - "/data/log"
+            - "--cluster_raft_logging"
+            - "--debug"
+            - "--dir"
+            - "/data/msg"
+            - "--store"
+            - "file"
+            - "--stan_debug"
+            - "--cluster"
+            - "nats://0.0.0.0:6222"
+            - "--routes"
+            - "nats://nats-streaming-1:6222"
+            - "--http_port"
+            - "8222"
+            - "--hb_interval"
+            - 2s
+            - "--hb_fail_count"
+            - "1"
+            - "--hb_timeout"
+            - 5s
+        ports: 
+            - "18226:8222"
+        volumes:
+            - "./nats-streaming-3:/data"
+        depends_on:
+            - nats-1
+            - nats-streaming-1
+networks:
+    nat-cluster_net:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+            -
+                subnet: 172.16.230.0/24

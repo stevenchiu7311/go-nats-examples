@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"time"
 
 	nats "github.com/nats-io/nats.go"
@@ -26,7 +28,7 @@ func main() {
 	}
 	defer nc.Close()
 
-	sc, err := stan.Connect("test-cluster", "nathan01", stan.NatsConn(nc),
+	sc, err := stan.Connect("test-cluster", "queue-group", stan.NatsConn(nc),
 		stan.SetConnectionLostHandler(func(_ stan.Conn, reason error) {
 			log.Printf("Connection lost, reason: %v\n", reason)
 
@@ -36,7 +38,7 @@ func main() {
 		fmt.Printf("CMake sure a NATS Streaming Server is running at: %s", URL)
 
 	}
-	startOpt := stan.StartAt(pb.StartPosition_First)
+	startOpt := stan.StartAt(pb.StartPosition_NewOnly)
 	subAck := stan.SetManualAckMode()
 	ackWait := stan.AckWait(10 * time.Second)
 
@@ -44,9 +46,7 @@ func main() {
 		var cnt = 0
 		timer := time.NewTimer(1 * time.Second)
 		for {
-			msgStr := fmt.Sprintf("hello_%d", cnt)
-			sc.Publish("topic", []byte(msgStr))
-			log.Println("Pub1:", msgStr)
+			sc.Publish("topic", []byte(fmt.Sprintf("hello_%d", cnt)))
 			cnt++
 			<-timer.C
 			timer.Reset(1 * time.Second)
@@ -56,13 +56,30 @@ func main() {
 	mcbSub1 := func(msg *stan.Msg) {
 		log.Println("Sub1:", string(msg.Data))
 		defer msg.Ack()
-		time.Sleep(time.Second*3)
+	}
+	mcbSub2 := func(msg *stan.Msg) {
+		log.Println("Sub2:", string(msg.Data))
+		counterStr := strings.Replace(string(msg.Data), "hello_", "", -1)
+		counter, _ := strconv.ParseInt(counterStr, 10, 0)
+		if counter < 3 {
+			defer msg.Ack()
+		} else {
+			log.Println("Sub2 no ack:", string(msg.Data))
+		}
 	}
 	var sub1 stan.Subscription
+	var sub2 stan.Subscription
 	go func() {
 		sub1, err = sc.QueueSubscribe("topic", "g1", mcbSub1, startOpt, stan.DurableName(""), stan.MaxInflight(1), subAck, ackWait)
 		if err != nil {
 			log.Println("queue subscribe Topic:", err)
+		}
+	}()
+
+	go func() {
+		sub2, err = sc.QueueSubscribe("topic", "g1", mcbSub2, startOpt, stan.DurableName(""), stan.MaxInflight(5), subAck, ackWait)
+		if err != nil {
+			log.Println("queue subscribe testTopic:", err)
 		}
 	}()
 
@@ -71,7 +88,9 @@ func main() {
 
 	<-c
 	sub1.Unsubscribe()
+	sub2.Unsubscribe()
 	sub1.Close()
+	sub2.ClearMaxPending()
 	sc.Close()
 }
 /*
