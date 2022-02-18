@@ -24,8 +24,7 @@ func main() {
 	}
 	// Create Pull based consumer with maximum 128 inflight.
 	// PullMaxWaiting defines the max inflight pull requests.
-	//sub, _ := js.PullSubscribe(subSubjectName, "order-review", nats.PullMaxWaiting(128))
-	sub, _ := js.PullSubscribe(subSubjectName, "order-review")
+	sub, _ := js.PullSubscribe(subSubjectName, "order-review", nats.PullMaxWaiting(128))
 	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Second)
 	defer cancel()
 	tick := time.NewTicker(1 * time.Second)
