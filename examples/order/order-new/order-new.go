@@ -40,7 +40,8 @@ func createOrder(js nats.JetStreamContext) error {
 			Status:     "created",
 		}
 		orderJSON, _ := json.Marshal(order)
-		_, err := js.Publish(subjectName, orderJSON, nats.MsgId(order.CustomerID))
+		//_, err := js.Publish(subjectName, orderJSON, nats.MsgId(order.CustomerID))
+		_, err := js.Publish(subjectName, orderJSON)
 		if err != nil {
 			return err
 		}
